@@ -43,7 +43,7 @@ impl Crate {
                 cargo_toml_path.push(&prefetch.path);
                 prefetch
             },
-            _ => panic!("unsupported source")
+            _ => panic!("unsupported source {:?}", source_type)
         };
 
         debug!("src = {:?}", prefetch.prefetch);
@@ -273,6 +273,17 @@ fn bins(v: &mut BTreeMap<String, toml::Value>) -> Vec<Bin> {
             Bin {
                 name: if let Some(toml::Value::String(s)) = bin.remove("name") { Some(s) } else { None },
                 path: if let Some(toml::Value::String(s)) = bin.remove("path") { Some(s) } else { None },
+                required_features: if let Some(toml::Value::Array(s)) = bin.remove("required-features") {
+                    let mut v = Vec::new();
+                    for s in s {
+                        if let toml::Value::String(s) = s {
+                            v.push(s)
+                        }
+                    }
+                    v
+                } else {
+                    Vec::new()
+                }
             }
         }).collect()
     } else {

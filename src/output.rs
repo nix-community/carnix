@@ -6,6 +6,7 @@ use std::io::{Read, Write};
 use regex::Regex;
 use std::path::PathBuf;
 use itertools::Itertools;
+use dirs;
 
 use {Error, ErrorKind};
 use cfg;
@@ -28,28 +29,31 @@ impl<'a> std::fmt::Display for FeatName<'a> {
 
 #[derive(Debug)]
 enum CrateType {
-    Workspace(BTreeMap<String, (Crate, PathBuf)>),
-    Single(String, (Crate, PathBuf)),
+    Workspace {
+        members: BTreeMap<String, (Crate, PathBuf)>,
+        package: Option<(String, (Crate, PathBuf))>,
+    },
+    Single(String, (Crate, PathBuf))
 }
 
-enum CrateIter<'a> {
-    Workspace(std::collections::btree_map::Iter<'a, String, (Crate, PathBuf)>),
-    Single(std::iter::Once<(&'a String, &'a (Crate, PathBuf))>),
+enum Either<A, B> {
+    A(A),
+    B(B)
 }
 
-impl<'a> Iterator for CrateIter<'a> {
-    type Item = (&'a String, &'a (Crate, PathBuf));
+impl<Item, A:Iterator<Item = Item>, B:Iterator<Item = Item>> Iterator for Either<A, B> {
+    type Item = Item;
     fn next(&mut self) -> Option<Self::Item> {
         match *self {
-            CrateIter::Workspace(ref mut x) => x.next(),
-            CrateIter::Single(ref mut x) => x.next(),
+            Either::A(ref mut a) => a.next(),
+            Either::B(ref mut b) => b.next(),
         }
     }
 }
 
 impl CrateType {
     fn is_workspace(&self) -> bool {
-        if let CrateType::Workspace(_) = *self {
+        if let CrateType::Workspace { .. } = *self {
             true
         } else {
             false
@@ -57,8 +61,20 @@ impl CrateType {
     }
     fn get(&self, key: &str) -> Option<&(Crate, PathBuf)> {
         match *self {
-            CrateType::Workspace(ref x) => x.get(key),
-            CrateType::Single(ref key0, ref x) if key == key0 => Some(x),
+            CrateType::Workspace { members: ref x, ref package } => {
+                if let Some(x) = x.get(key) {
+                    Some(x)
+                } else if let Some(ref p) = *package {
+                    if p.0 == key {
+                        Some(&p.1)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            },
+            CrateType::Single(ref name, ref cr) if name == key => Some(cr),
             CrateType::Single(_, _) => None,
         }
     }
@@ -83,15 +99,33 @@ impl CrateType {
             SourceType::None
         }
     }
-    fn iter(&self) -> CrateIter {
+    fn iter<'a>(&'a self) -> impl Iterator<Item = (&'a String, &'a (Crate, PathBuf))> {
         match *self {
-            CrateType::Workspace(ref x) => CrateIter::Workspace(x.iter()),
-            CrateType::Single(ref a, ref b) => CrateIter::Single(std::iter::once((a, b))),
+            CrateType::Workspace { ref members, ref package } =>
+                Either::A(
+                    members.iter().chain(package.iter().map(|&(ref a, ref b)| (a, b)))
+                ),
+            CrateType::Single(ref name, ref cr) => {
+                Either::B(
+                    std::iter::once((name, cr))
+                )
+            }
         }
     }
 }
 
 fn workspace_members(base_path: &Path, cargo_toml: &toml::Value) -> Option<CrateType> {
+    let package = if let Some(package) = cargo_toml.get("package") {
+        let name = package.get("name").unwrap();
+        let cra = get_package_version(&package);
+        Some((
+            name.as_str().unwrap().to_owned(),
+            (cra, base_path.to_path_buf()),
+        ))
+    } else {
+        None
+    };
+
     if let Some(ws) = cargo_toml.get("workspace") {
         let mut workspace_members = BTreeMap::new();
         let members = ws.as_table()
@@ -123,17 +157,10 @@ fn workspace_members(base_path: &Path, cargo_toml: &toml::Value) -> Option<Crate
                 }
             }
         }
-        Some(CrateType::Workspace(workspace_members))
-    } else if let Some(package) = cargo_toml.get("package") {
-        let name = package.get("name").unwrap();
-        let cra = get_package_version(&package);
-        Some(CrateType::Single(
-            name.as_str().unwrap().to_owned(),
-            (cra, base_path.to_path_buf()),
-        ))
-    } else {
-        None
+        return Some(CrateType::Workspace { members: workspace_members, package })
     }
+
+    package.map(|(a, b)| CrateType::Single(a, b))
 }
 
 pub fn generate_nix<W: Write, P: AsRef<Path>, Q: AsRef<Path>>(
@@ -186,49 +213,60 @@ pub fn generate_nix<W: Write, P: AsRef<Path>, Q: AsRef<Path>>(
     debug!("main deps: {:?} {:?}", cr, deps);
 
     // Loading the cache (a map between package versions and Nix store paths).
-    let mut cache_path = std::env::home_dir().unwrap();
+    let mut cache_path = dirs::home_dir().unwrap();
     cache_path.push(".cargo");
     std::fs::create_dir_all(&cache_path).unwrap();
     cache_path.push("nix-cache");
     let mut cache = Cache::new(&cache_path);
 
+
     // Compute the meta-information for all packages in the lock file.
     debug!("base_path: {:?}", base_path);
 
-    let main_meta = if let Some(root) = lock.as_table_mut().unwrap().get("root") {
-        let main_cra = get_package_version(&root);
+    let main_meta = {
+        let root = if let Some(root) = lock.as_table().unwrap().get("root") {
+            Some(root)
+        } else if let Some(name) = cargo_toml.get("package").unwrap().as_table().unwrap().get("name") {
+            packages.iter().find(|x| x.get("name").unwrap() == name)
+        } else {
+            None
+        };
 
-        debug!("name = {:?}", main_cra.name);
-        if let Some(dep) = deps.get(&main_cra.name) {
-            debug!("dep = {:?}", dep);
-        }
+        if let Some(root) = root {
+            let main_cra = get_package_version(&root);
 
-        let path = workspace_members.source_type(src.as_ref(), &main_cra.name);
-        let mut meta = main_cra.prefetch(&mut cache, &path).unwrap();
-        if let Some(inc) = cargo_toml
-            .get("package")
-            .unwrap()
-            .as_table()
-            .unwrap()
-            .get("include")
-        {
-            meta.include = Some(
-                inc.as_array()
-                    .unwrap()
-                    .into_iter()
-                    .map(|x| x.as_str().unwrap().to_string())
-                    .collect(),
-            )
-        }
-        if let Some(ref src) = src {
-            meta.src = Src::Path {
-                path: src.as_ref().to_path_buf(),
-                workspace_member: None,
+            debug!("name = {:?}", main_cra.name);
+            if let Some(dep) = deps.get(&main_cra.name) {
+                debug!("dep = {:?}", dep);
             }
+
+            let path = workspace_members.source_type(src.as_ref(), &main_cra.name);
+            let mut meta = main_cra.prefetch(&mut cache, &path).unwrap();
+            if let Some(inc) = cargo_toml
+                .get("package")
+                .unwrap()
+                .as_table()
+                .unwrap()
+                .get("include")
+            {
+                meta.include = Some(
+                    inc.as_array()
+                        .unwrap()
+                        .into_iter()
+                        .map(|x| x.as_str().unwrap().to_string())
+                        .collect(),
+                )
+            }
+            if let Some(ref src) = src {
+                meta.src = Src::Path {
+                    path: src.as_ref().to_path_buf(),
+                    workspace_member: None,
+                }
+            }
+            Some(meta)
+        } else {
+            None
         }
-        Some(meta)
-    } else {
-        None
     };
 
     let mut all_packages = fixpoint(
@@ -293,7 +331,9 @@ fn local_source_type<P:AsRef<Path>>(
     deps: &BTreeMap<String, Dep>,
     name: &str,
 ) -> SourceType {
+    debug!("crate_type: {:?}", crate_type);
     let loc = crate_type.source_type(src.as_ref(), name);
+    debug!("loc: {:?}", loc);
     if let SourceType::None = loc {
         if let Some(ref dep) = deps.get(name) {
             if let Some(ref p) = dep.path {
@@ -446,7 +486,14 @@ fn fixpoint<P: AsRef<Path>>(
             }
         }
         if !at_least_one_resolved {
-            error!("Could not resolve some sources");
+            error!("Could not resolve some sources, unknown packages:");
+            for package in unknown_packages.iter() {
+                if let Some(name) = package.get("name") {
+                    error!("  - {}", name.as_str().unwrap());
+                } else {
+                    error!("  - {:?}", package)
+                }
+            }
             std::process::exit(1)
         }
         std::mem::swap(&mut packages_fixpoint, &mut unknown_packages)
@@ -987,8 +1034,9 @@ impl Crate {
                 ref path,
                 ref workspace_member,
             } => {
-                let path = path.canonicalize()?;
-                let path = if let Ok(path) = path.strip_prefix(root_prefix) {
+                debug!("path = {:?}", path);
+                let path_canon = path.canonicalize()?;
+                let path = if let Ok(path) = path_canon.strip_prefix(root_prefix) {
                     path
                 } else {
                     &path
@@ -1004,7 +1052,9 @@ impl Crate {
                 let s = path.to_string_lossy();
 
                 let mut filter_source = String::new();
-                if let Ok(fsmeta) = std::fs::metadata(path) {
+                debug!("fsmeta {:?}", path);
+                if let Ok(fsmeta) = std::fs::metadata(&path_canon) {
+                    debug!("fsmeta = {:?}", fsmeta);
                     if fsmeta.is_dir() {
                         if let Some(ref include) = meta.include {
                             filter_source.push_str("include [ ");
@@ -1015,6 +1065,8 @@ impl Crate {
                                 filter_source.push_str(" ");
                             }
                             filter_source.push_str("] ");
+                        } else {
+                            filter_source.push_str("exclude [ \".git\" \"target\" ] ");
                         }
                     }
                 }
@@ -1065,18 +1117,36 @@ impl Crate {
             writeln!(w, "{}  type = {};", indent, t)?;
         }
         if meta.bins.len() > 0 {
-            write!(w, "{}  crateBin = [ ", indent)?;
-            for bin in meta.bins.iter() {
-                write!(w, "{{ ")?;
+            writeln!(w, "{}  crateBin =", indent)?;
+            for (i, bin) in meta.bins.iter().enumerate() {
+                if i != 0 {
+                    write!(w, " ++\n")?;
+                }
+                if bin.required_features.is_empty() {
+                    write!(w, "{}    [{{ ", indent)?;
+                } else {
+                    write!(w, "{}    (if ", indent)?;
+                    for (i, r) in bin.required_features.iter().enumerate() {
+                        if i != 0 {
+                            write!(w, "&& ")?;
+                        }
+                        write!(w, "features.\"{}\".\"{}\".\"{}\" ", nix_name_, version, r)?;
+                    }
+                    write!(w, "then [{{ ");
+                }
                 if let Some(ref name) = bin.name {
                     write!(w, " name = \"{}\"; ", name)?;
                 }
                 if let Some(ref path) = bin.path {
                     write!(w, " path = \"{}\"; ", path)?;
                 }
-                write!(w, "}} ")?;
+                if !bin.required_features.is_empty() {
+                    write!(w, "}} ] else [])")?;
+                } else {
+                    write!(w, "}}])")?;
+                }
             }
-            writeln!(w, "];")?;
+            writeln!(w, ";")?;
         }
         if meta.build.len() > 0 {
             writeln!(w, "{}  build = \"{}\";", indent, meta.build)?;
@@ -1158,7 +1228,7 @@ impl Crate {
         if !meta.declared_features.is_empty() || has_feature_deps {
             write!(
                 w,
-                "{}  features = mkFeatures (features.{}.\"{}\" or {{}});\n",
+                "{}  features = mkFeatures (features.\"{}\".\"{}\" or {{}});\n",
                 indent,
                 nix_name_,
                 version

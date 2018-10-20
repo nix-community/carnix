@@ -74,6 +74,7 @@ pub struct ConditionalFeature {
 pub struct Bin {
     pub path: Option<String>,
     pub name: Option<String>,
+    pub required_features: Vec<String>,
 }
 
 use std::str::FromStr;

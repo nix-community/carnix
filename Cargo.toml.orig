@@ -1,12 +1,12 @@
 [package]
 name = "carnix"
-version = "0.8.5"
+version = "0.8.6"
 authors = ["pe@pijul.org <pe@pijul.org>"]
 include = ["Cargo.toml", "src/main.rs", "src/cargo-generate-nixfile.rs", "src/cache.rs", "src/cfg.rs", "src/krate.rs", "src/prefetch.rs", "src/preamble.nix", "src/output.rs", "src/error.rs" ]
 description = "Generate Nix expressions from Cargo.lock files (in order to use Nix as a build system for crates)."
-homepage = "https://nest.pijul.com/pmeunier/nix-rust"
+homepage = "https://nest.pijul.com/pmeunier/carnix"
 license = "MIT/Apache-2.0"
-repository = "https://nest.pijul.com/pmeunier/nix-rust"
+repository = "https://nest.pijul.com/pmeunier/carnix"
 
 [[bin]]
 name = "cargo-generate-nixfile"
@@ -54,3 +54,6 @@ version = "0.3"
 
 [dependencies.itertools]
 version = "0.7"
+
+[dependencies.dirs]
+version = "1.0"

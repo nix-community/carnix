@@ -16,6 +16,8 @@ extern crate serde_derive;
 extern crate serde_json;
 extern crate tempdir;
 extern crate toml;
+extern crate dirs;
+
 use std::io::{BufWriter, Read};
 use clap::{App, Arg, ArgMatches, SubCommand, AppSettings};
 use std::process::{Command, Stdio};
@@ -60,7 +62,7 @@ fn main() {
                          .last(true)),
             )
             .subcommand(
-                SubCommand::with_name("nix")
+                SubCommand::with_name("generate-nix")
                     .arg(
                         Arg::with_name("src")
                             .long("--src")
@@ -73,15 +75,33 @@ fn main() {
             )
             .get_matches();
 
-    if let Some(matches) = matches.subcommand_matches("nix") {
+    if let Some(matches) = matches.subcommand_matches("generate-nix") {
         let cargo_lock = krate::find_cargo_lock().unwrap();
         let mut cargo_nix = cargo_lock.clone();
         cargo_nix.set_extension("nix");
         let mut nix_file = BufWriter::new(std::fs::File::create(&cargo_nix).unwrap());
+        let mut cwd = std::env::current_dir().unwrap();
         if let Err(e) = output::generate_nix(
             &cargo_lock,
             matches.is_present("standalone"),
-            matches.value_of("src"),
+            if let Some(m) = matches.value_of("src") {
+                Some(m)
+            } else {
+                let mut src = None;
+                loop {
+                    cwd.push("Cargo.lock");
+                    if std::fs::metadata(&cwd).is_ok() {
+                        cwd.pop();
+                        src = cwd.to_str();
+                        break
+                    }
+                    cwd.pop(); // remove "Cargo.lock"
+                    if !cwd.pop() {
+                        break
+                    }
+                }
+                src
+            },
             &mut nix_file,
         ) {
             eprintln!("{}", e);
