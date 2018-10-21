@@ -80,28 +80,10 @@ fn main() {
         let mut cargo_nix = cargo_lock.clone();
         cargo_nix.set_extension("nix");
         let mut nix_file = BufWriter::new(std::fs::File::create(&cargo_nix).unwrap());
-        let mut cwd = std::env::current_dir().unwrap();
         if let Err(e) = output::generate_nix(
             &cargo_lock,
             matches.is_present("standalone"),
-            if let Some(m) = matches.value_of("src") {
-                Some(m)
-            } else {
-                let mut src = None;
-                loop {
-                    cwd.push("Cargo.lock");
-                    if std::fs::metadata(&cwd).is_ok() {
-                        cwd.pop();
-                        src = cwd.to_str();
-                        break
-                    }
-                    cwd.pop(); // remove "Cargo.lock"
-                    if !cwd.pop() {
-                        break
-                    }
-                }
-                src
-            },
+            matches.value_of("src"),
             &mut nix_file,
         ) {
             eprintln!("{}", e);
