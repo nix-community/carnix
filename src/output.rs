@@ -1140,10 +1140,10 @@ impl Crate {
                 if let Some(ref path) = bin.path {
                     write!(w, " path = \"{}\"; ", path)?;
                 }
-                if !bin.required_features.is_empty() {
-                    write!(w, "}} ] else [])")?;
+                if bin.required_features.is_empty() {
+                    write!(w, "}}]")?;
                 } else {
-                    write!(w, "}}])")?;
+                    write!(w, "}} ] else [])")?;
                 }
             }
             writeln!(w, ";")?;
