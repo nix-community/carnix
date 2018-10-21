@@ -12,7 +12,7 @@
 
 [package]
 name = "carnix"
-version = "0.8.6"
+version = "0.8.7"
 authors = ["pe@pijul.org <pe@pijul.org>"]
 include = ["Cargo.toml", "src/main.rs", "src/cargo-generate-nixfile.rs", "src/cache.rs", "src/cfg.rs", "src/krate.rs", "src/prefetch.rs", "src/preamble.nix", "src/output.rs", "src/error.rs"]
 description = "Generate Nix expressions from Cargo.lock files (in order to use Nix as a build system for crates)."
@@ -28,7 +28,7 @@ path = "src/cargo-generate-nixfile.rs"
 name = "carnix"
 path = "src/main.rs"
 [dependencies.clap]
-version = "2.31"
+version = "2.32"
 
 [dependencies.dirs]
 version = "1.0"
@@ -37,7 +37,7 @@ version = "1.0"
 version = "0.5"
 
 [dependencies.error-chain]
-version = "0.11"
+version = "0.12"
 
 [dependencies.itertools]
 version = "0.7"
@@ -46,13 +46,13 @@ version = "0.7"
 version = "0.4"
 
 [dependencies.nom]
-version = "3.2"
+version = "4.1"
 
 [dependencies.regex]
-version = "0.2"
+version = "1.0"
 
 [dependencies.rusqlite]
-version = "0.13"
+version = "0.14"
 
 [dependencies.serde]
 version = "1.0"

@@ -1,6 +1,6 @@
 [package]
 name = "carnix"
-version = "0.8.6"
+version = "0.8.7"
 authors = ["pe@pijul.org <pe@pijul.org>"]
 include = ["Cargo.toml", "src/main.rs", "src/cargo-generate-nixfile.rs", "src/cache.rs", "src/cfg.rs", "src/krate.rs", "src/prefetch.rs", "src/preamble.nix", "src/output.rs", "src/error.rs" ]
 description = "Generate Nix expressions from Cargo.lock files (in order to use Nix as a build system for crates)."
@@ -16,44 +16,18 @@ path = "src/cargo-generate-nixfile.rs"
 name = "carnix"
 path = "src/main.rs"
 
-[dependencies.clap]
-version = "2.31"
-
-[dependencies.serde]
-version = "1.0"
-
-[dependencies.toml]
-version = "0.4"
-
-[dependencies.serde_json]
-version = "1.0"
-
-[dependencies.env_logger]
-version = "0.5"
-
-[dependencies.error-chain]
-version = "0.11"
-
-[dependencies.nom]
-version = "3.2"
-
-[dependencies.log]
-version = "0.4"
-
-[dependencies.regex]
-version = "0.2"
-
-[dependencies.serde_derive]
-version = "1.0"
-
-[dependencies.rusqlite]
-version = "0.13"
-
-[dependencies.tempdir]
-version = "0.3"
-
-[dependencies.itertools]
-version = "0.7"
-
-[dependencies.dirs]
-version = "1.0"
+[dependencies]
+clap = "2.32"
+serde = "1.0"
+toml = "0.4"
+serde_json = "1.0"
+env_logger = "0.5"
+error-chain = "0.12"
+nom = "4.1"
+log = "0.4"
+regex = "1.0"
+serde_derive = "1.0"
+rusqlite = "0.14"
+tempdir = "0.3"
+itertools = "0.7"
+dirs = "1.0"

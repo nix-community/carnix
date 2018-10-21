@@ -1,6 +1,5 @@
 use {ErrorKind, Error};
 use std::str::from_utf8;
-use nom::IResult;
 use std::io::Write;
 
 #[derive(Debug, Clone, Copy)]
@@ -23,12 +22,11 @@ pub enum Cfg {
 pub fn parse_target(target: &str) -> Result<Vec<Cfg>, Error> {
     debug!("{:?}", target);
     match cfg(target.as_bytes()) {
-        IResult::Done(i, o) => {
+        Ok((i, o)) => {
             debug!("i = {:?}", i);
             Ok(o)
         }
-        IResult::Error(e) => panic!("error {:?}", e),
-        IResult::Incomplete(n) => panic!("incomplete {:?}", n)
+        Err(e) => panic!("error {:?}", e),
     }
 }
 
