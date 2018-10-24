@@ -226,7 +226,7 @@ pub fn generate_nix<W: Write, P: AsRef<Path>, Q: AsRef<Path>>(
     let main_meta = {
         let root = if let Some(root) = lock.as_table().unwrap().get("root") {
             Some(root)
-        } else if let Some(name) = cargo_toml.get("package").unwrap().as_table().unwrap().get("name") {
+        } else if let Some(name) = cargo_toml.get("package").and_then(|package| package.as_table().and_then(|package| package.get("name"))) {
             packages.iter().find(|x| x.get("name").unwrap() == name)
         } else {
             None
