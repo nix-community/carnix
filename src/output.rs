@@ -1113,8 +1113,12 @@ impl Crate {
         if meta.plugin {
             writeln!(w, "{}  plugin = {};", indent, meta.plugin)?;
         }
-        if let Some(ref t) = meta.crate_type {
-            writeln!(w, "{}  type = {};", indent, t)?;
+        if !meta.crate_type.is_empty() {
+            write!(w, "{}  type = [ ", indent)?;
+            for t in &meta.crate_type {
+                write!(w, "{} ", t)?;
+            }
+            writeln!(w, "];")?;
         }
         if meta.bins.len() > 0 {
             writeln!(w, "{}  crateBin =", indent)?;

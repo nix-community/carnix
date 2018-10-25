@@ -242,20 +242,20 @@ fn crate_file(v: &BTreeMap<String, toml::Value>) -> String {
     }
 }
 
-fn crate_type(v: &BTreeMap<String, toml::Value>) -> Option<String> {
+fn crate_type(v: &BTreeMap<String, toml::Value>) -> Vec<String> {
     if let Some(crate_file) = v.get("lib") {
         if let Some(crate_file) = crate_file.as_table() {
             if let Some(crate_type) = crate_file.get("crate-type") {
                 debug!("crate_type = {:?}", crate_type);
                 if let Some(s) = crate_type.as_str() {
-                    return Some(s.to_string())
-                } else if let Some(s) = crate_type.as_array().and_then(|x| x.get(0)) {
-                    return Some(s.to_string())
+                    return vec![s.to_string()]
+                } else if let Some(s) = crate_type.as_array() {
+                    return s.into_iter().map(|x| x.to_string()).collect()
                 }
             }
         }
     }
-    None
+    Vec::new()
 }
 
 fn lib_name(v: &BTreeMap<String, toml::Value>) -> String {

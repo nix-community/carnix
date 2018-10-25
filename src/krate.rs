@@ -27,7 +27,7 @@ pub struct Meta {
     pub lib_name: String,
     pub proc_macro: bool,
     pub plugin: bool,
-    pub crate_type: Option<String>,
+    pub crate_type: Vec<String>,
     pub default_features: Vec<String>,
     pub declared_features: BTreeSet<String>,
     pub use_default_features: Option<bool>,
