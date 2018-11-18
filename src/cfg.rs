@@ -58,6 +58,7 @@ fn to_nix_op(w: &mut Write, op: CfgOp, target: &[Cfg]) -> Result<(), Error> {
                 match key.as_str() {
                     "target_os" => cfg_value(w, "kernel", value)?,
                     "target_env" => cfg_value(w, "abi", value)?,
+                    "target_arch" => cfg_value(w, "cpu", value)?,
                     _ => return Err(ErrorKind::CouldNotTranslateTarget.into())
                 }
             },
