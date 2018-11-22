@@ -1,8 +1,10 @@
-use rusqlite;
 use std::path::Path;
 use krate::Src;
-use serde_json;
 use std::path::PathBuf;
+use Error;
+use std;
+use std::collections::BTreeMap;
+use std::io::{Read, Write};
 
 #[derive(Debug, Clone)]
 pub struct Prefetch {
@@ -12,46 +14,120 @@ pub struct Prefetch {
 
 #[derive(Debug)]
 pub struct Cache {
-    cache: rusqlite::Connection,
+    path: PathBuf,
+    cache: String,
+    lines: Vec<(usize, usize)>,
+    new: BTreeMap<String, Prefetch>,
+}
+
+impl Drop for Cache {
+    fn drop(&mut self) {
+        std::fs::create_dir_all(self.path.parent().unwrap()).unwrap();
+        let mut path2 = self.path.clone();
+        path2.set_extension("tmp");
+        let mut f = std::fs::File::create(&path2).unwrap();
+        let mut new_it = self.new.iter().peekable();
+        let mut ex_it = self.lines.iter().peekable();
+        loop {
+            let advance_new = if let Some((a, b)) = new_it.peek() {
+                if let Some((c, d)) = ex_it.peek() {
+                    let (u, v, w) = self.get_index(*c, *d).unwrap();
+                    if u < a {
+                        ex_it.next();
+                        writeln!(f, "{} {} {}", u, v, w).unwrap();
+                        false
+                    } else {
+                        if let Src::Crate { ref sha256 } = b.prefetch {
+                            writeln!(f, "{} {} {}", a, sha256, b.path.to_string_lossy()).unwrap();
+                        }
+                        true
+                    }
+
+                } else {
+                    if let Src::Crate { ref sha256 } = b.prefetch {
+                        writeln!(f, "{} {} {}", a, sha256, b.path.to_string_lossy()).unwrap();
+                    }
+                    true
+                }
+            } else {
+                for &(l0, l1) in ex_it {
+                    let (u, v, w) = self.get_index(l0, l1).unwrap();
+                    writeln!(f, "{} {} {}", u, v, w).unwrap();
+                }
+                break
+            };
+            if advance_new {
+                new_it.next();
+            } else {
+                ex_it.next();
+            }
+        }
+        std::fs::rename(&path2, &self.path).unwrap();
+    }
 }
 
 impl Cache {
-    pub fn new<P:AsRef<Path>>(file: P) -> Self {
+    pub fn new<P:AsRef<Path>>(path: P) -> Result<Self, Error> {
+        let path = path.as_ref();
+        let mut cache = String::new();
+        if let Ok(mut f) = std::fs::File::open(path) {
+            f.read_to_string(&mut cache)?;
+        }
+        let mut lines = Vec::new();
+        for l in cache.lines() {
+            if lines.is_empty() {
+                lines.reserve(2 * cache.len() / l.len());
+            }
+            let l0 = l.as_ptr() as usize - cache.as_ptr() as usize;
+            lines.push((l0, l0 + l.len()))
+        }
+        Ok(Cache {
+            path: path.to_path_buf(),
+            cache,
+            lines,
+            new: BTreeMap::new(),
+        })
+    }
 
-        let conn = rusqlite::Connection::open(
-            file,
-        ).unwrap();
-
-        conn.execute("CREATE TABLE IF NOT EXISTS fetches (
-                  id              INTEGER PRIMARY KEY,
-                  name            TEXT UNIQUE NOT NULL,
-                  json            TEXT,
-                  path            TEXT NOT NULL
-                  )", &[]).unwrap();
-        Cache {
-            cache: conn,
+    fn get_index(&self, l0: usize, l1: usize) -> Option<(&str, &str, &str)> {
+        let a = self.cache.get(l0..l1).unwrap();
+        let mut it = a.split(' ');
+        if let (Some(u), Some(v), Some(w)) = (it.next(), it.next(), it.next()) {
+            Some((u, v, w))
+        } else {
+            None
         }
     }
 
     pub fn get(&mut self, url: &str) -> Option<Prefetch> {
-        let mut get_stmt = self.cache.prepare("SELECT json, path FROM fetches WHERE name = ?1").unwrap();
-        let pre: Option<Prefetch> = get_stmt.query_map(&[&url], |row| {
-            let pref: String = row.get(0);
-            let path: String = row.get(1);
-            Prefetch {
-                prefetch: serde_json::from_str(&pref).unwrap(),
-                path: Path::new(&path).to_path_buf()
-            }
-        }).unwrap().next().and_then(|x| x.ok());
-        pre
+        debug!("cache get {:?}", url);
+        if let Some(pre) = self.new.get(url) {
+            Some(pre.clone())
+        } else {
+            let n = match self.lines.binary_search_by(|&(a, b)| {
+                let url0 = self.cache.get(a..b).unwrap();
+                debug!("{:?} {:?}", url, url0);
+                if url0.starts_with(url) {
+                    std::cmp::Ordering::Equal
+                } else {
+                    url0.cmp(url)
+                }
+            }) {
+                Ok(n) => n,
+                _ => return None
+            };
+            debug!("n = {:?}", n);
+            let (l0, l1) = self.lines[n];
+            self.get_index(l0, l1).map(|(_, b, c)| {
+                Prefetch {
+                    prefetch: Src::Crate { sha256: b.to_string() },
+                    path: Path::new(c).to_path_buf(),
+                }
+            })
+        }
     }
 
-    pub fn insert(&mut self, url: &str, prefetch: &Prefetch) {
-        let mut insert_stmt = self.cache.prepare("INSERT INTO fetches(name, json, path) VALUES(?1, ?2, ?3)").unwrap();
-        insert_stmt.execute(&[
-            &url,
-            &serde_json::to_string(&prefetch.prefetch).unwrap(),
-            &prefetch.path.to_str()
-        ]).unwrap();
+    pub fn insert(&mut self, url: &str, prefetch: Prefetch) {
+        self.new.insert(url.to_string(), prefetch);
     }
 }

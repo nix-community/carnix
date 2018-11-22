@@ -9,7 +9,6 @@ extern crate log;
 #[macro_use]
 extern crate nom;
 extern crate regex;
-extern crate rusqlite;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
@@ -18,11 +17,12 @@ extern crate tempdir;
 extern crate toml;
 extern crate dirs;
 
-use std::io::{BufWriter, Read};
+use std::io::{BufWriter, Read, BufRead};
 use clap::{App, Arg, ArgMatches, SubCommand, AppSettings};
 use std::process::{Command, Stdio};
 use std::path::{Path, PathBuf};
-
+use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 mod error;
 pub use error::*;
 mod cache;
@@ -40,13 +40,24 @@ fn main() {
             .author("pmeunier <pe@pijul.org>")
             .about("Generate a nix derivation set from a cargo registry")
             .subcommand(
-                SubCommand::with_name("build").arg(
-                    Arg::with_name("include")
-                        .short("-I")
-                        .help("Forwarded to nix-build")
-                        .takes_value(true)
-                        .multiple(true),
-                ),
+                SubCommand::with_name("generate-crates-io")
+                    .arg(Arg::with_name("file")
+                         .help("Generate a crates-io.nix file from a list of packages")
+                         .takes_value(true))
+            )
+            .subcommand(
+                SubCommand::with_name("build")
+                    .arg(Arg::with_name("include")
+                         .short("-I")
+                         .help("Forwarded to nix-build")
+                         .takes_value(true)
+                         .multiple(true))
+                    .arg(Arg::with_name("release")
+                         .help("Compile in release mode"))
+                    .arg(Arg::with_name("member")
+                         .long("--member")
+                         .takes_value(true)
+                         .help("Select which derivation to compile")),
             )
             .subcommand(
                 SubCommand::with_name("run")
@@ -59,7 +70,13 @@ fn main() {
                     .arg(Arg::with_name("rest")
                          .help("Pass the remaining arguments to the program")
                          .multiple(true)
-                         .last(true)),
+                         .last(true))
+                    .arg(Arg::with_name("release")
+                         .help("Compile in release mode"))
+                    .arg(Arg::with_name("member")
+                         .long("--member")
+                         .takes_value(true)
+                         .help("Select which derivation to compile")),
             )
             .subcommand(
                 SubCommand::with_name("generate-nix")
@@ -67,7 +84,7 @@ fn main() {
                         Arg::with_name("src")
                             .long("--src")
                             .help("Source of the main project")
-                            .takes_value(true),
+                            .takes_value(true)
                     )
                     .arg(Arg::with_name("standalone").long("--standalone").help(
                         "Produce a standalone file, which can be built directly with nix-build.",
@@ -116,6 +133,45 @@ fn main() {
                 .unwrap();
             std::process::exit(status.code().unwrap())
         }
+    } else if let Some(matches) = matches.subcommand_matches("generate-crates-io") {
+        let file: Box<std::io::Read> = if let Some(f) = matches.value_of("file") {
+            Box::new(std::fs::File::open(f).unwrap())
+        } else {
+            Box::new(std::io::stdin())
+        };
+        let mut file = std::io::BufReader::new(file);
+        let mut s = String::new();
+        let mut crates = BTreeMap::new();
+
+        let mut cache_path = dirs::home_dir().unwrap();
+        cache_path.push(".cargo");
+        std::fs::create_dir_all(&cache_path).unwrap();
+        cache_path.push("nix-cache");
+        let mut cache = cache::Cache::new(&cache_path).unwrap();
+
+        loop {
+            s.clear();
+            match file.read_line(&mut s) {
+                Ok(n) if n > 0 => {
+                    let mut krate: krate::Crate = s.parse().unwrap();
+                    krate.found_in_lock = true;
+                    let mut meta = krate.prefetch(&mut cache, &krate::SourceType::CratesIO).unwrap();
+                    for (_, dep) in meta.dependencies.iter_mut().chain(meta.build_dependencies.iter_mut()) {
+                        dep.cr.found_in_lock = true
+                    }
+                    for (_, dep) in meta.target_dependencies.iter_mut() {
+                        for (_, dep) in dep.iter_mut() {
+                            dep.cr.found_in_lock = true
+                        }
+                    }
+                    crates.insert(krate, meta);
+                }
+                _ => break
+            }
+        }
+        std::mem::drop(cache);
+        let names: BTreeSet<_> = crates.iter().map(|(ref x, _)| x.name.clone()).collect();
+        output::write_crates_io(&crates, &names).unwrap();
     }
 }
 
@@ -156,11 +212,21 @@ fn build(matches: &ArgMatches) -> Result<String> {
         }
     }
 
-    let import = format!(
-        "(import {}{}).__all",
-        if nix.is_relative() { "./" } else { "" },
-        &nix.to_string_lossy()
-    );
+    let import = if let Some(member) = matches.value_of("member") {
+        format!("((import {}{}).{} {{}}).override {{ release = {}; }}",
+                if nix.is_relative() { "./" } else { "" },
+                &nix.to_string_lossy(),
+                member,
+                matches.is_present("release"),
+        )
+    } else {
+        format!("map (x: x.override {{ release = {}; }}) (import {}{})._all",
+                matches.is_present("release"),
+                if nix.is_relative() { "./" } else { "" },
+                &nix.to_string_lossy(),
+        )
+    };
+    debug!("{:?}", import);
     let mut args = vec!["-E", &import];
     if let Some(i) = matches.values_of("include") {
         for i in i {

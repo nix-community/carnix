@@ -163,7 +163,7 @@ impl Crate {
             path: Path::new(path).to_path_buf(),
         };
         if from_cache.is_none() {
-            cache.insert(&url, &pre);
+            cache.insert(&url, pre.clone());
         }
         Ok(pre)
     }
@@ -203,7 +203,7 @@ impl Crate {
                         path: Path::new(path).to_path_buf()
                     };
                     if from_cache.is_none() {
-                        cache.insert(&cached_url, &pre);
+                        cache.insert(&cached_url, pre.clone());
                     }
                     Ok(pre)
                 } else {

@@ -168,7 +168,7 @@ pub fn generate_nix<W: Write, P: AsRef<Path>, Q: AsRef<Path>>(
     standalone: bool,
     src: Option<Q>,
     nix_file: W,
-) -> Result<(), Error> {
+) -> Result<BTreeMap<Crate, Meta>, Error> {
     let mut cr = lockfile.as_ref().to_path_buf();
     let mut lock: toml::Value = {
         let mut lockfile = std::fs::File::open(&cr).unwrap();
@@ -217,7 +217,7 @@ pub fn generate_nix<W: Write, P: AsRef<Path>, Q: AsRef<Path>>(
     cache_path.push(".cargo");
     std::fs::create_dir_all(&cache_path).unwrap();
     cache_path.push("nix-cache");
-    let mut cache = Cache::new(&cache_path);
+    let mut cache = Cache::new(&cache_path)?;
 
 
     // Compute the meta-information for all packages in the lock file.
@@ -278,6 +278,9 @@ pub fn generate_nix<W: Write, P: AsRef<Path>, Q: AsRef<Path>>(
         main_meta.as_ref(),
     )?;
 
+    // Make sure we save the cache.
+    std::mem::drop(cache);
+
     // Adding the root crate, the one we're compiling.
     if let Some(mut main_meta) = main_meta {
         if let Some(root) = lock.as_table_mut().unwrap().get("root") {
@@ -294,8 +297,8 @@ pub fn generate_nix<W: Write, P: AsRef<Path>, Q: AsRef<Path>>(
         }
     }
 
-    output(standalone, workspace_members, all_packages, base_path, nix_file)?;
-    Ok(())
+    output(standalone, workspace_members, &all_packages, base_path, nix_file)?;
+    Ok(all_packages)
 }
 
 fn cargo_lock_source_type(package: &toml::Value) -> SourceType {
@@ -502,10 +505,28 @@ fn fixpoint<P: AsRef<Path>>(
     Ok(all_packages)
 }
 
+pub fn write_crates_io(all_packages: &BTreeMap<Crate, Meta>, names: &BTreeSet<String>) -> Result<(), Error> {
+    let mut extra_crates_io = std::io::BufWriter::new(std::fs::File::create("crates-io.nix")?);
+    extra_crates_io.write_all(b"{ lib, buildRustCrate, buildRustCrateHelpers }:
+with buildRustCrateHelpers;
+let inherit (lib.lists) fold;
+    inherit (lib.attrsets) recursiveUpdate;
+in
+rec {\n
+")?;
+    for (cra, meta) in all_packages.iter() {
+        if let Src::Crate { .. } = meta.src {
+            cra.output_package(Path::new(""), &mut extra_crates_io, 2, &meta, &names, "")?;
+        }
+    }
+    extra_crates_io.write_all(b"}\n")?;
+    Ok(())
+}
+
 fn output<W: Write>(
     standalone: bool,
     workspace_members: CrateType,
-    all_packages: BTreeMap<Crate, Meta>,
+    all_packages: &BTreeMap<Crate, Meta>,
     root_prefix: &Path,
     mut nix_file: W,
 ) -> Result<(), Error> {
@@ -536,21 +557,16 @@ fn output<W: Write>(
         names.insert(cra.name.clone());
     }
 
+    write_crates_io(&all_packages, &names)?;
     {
-        let mut extra_crates_io = std::io::BufWriter::new(std::fs::File::create("crates-io.nix")?);
-        extra_crates_io.write_all(b"{ lib, buildRustCrate, buildRustCrateHelpers }:
-with buildRustCrateHelpers;
-let inherit (lib.lists) fold;
-    inherit (lib.attrsets) recursiveUpdate;
-in
-rec {\n
-")?;
+        // Write a list of packages and versions, to be used by
+        // `carnix generate-crates-io`.
+        let mut f = std::fs::File::create("crates-io.list")?;
         for (cra, meta) in all_packages.iter() {
             if let Src::Crate { .. } = meta.src {
-                cra.output_package(root_prefix, &mut extra_crates_io, 2, &meta, &names, "")?;
+                writeln!(f, "{}", cra)?;
             }
         }
-        extra_crates_io.write_all(b"}\n")?;
     }
     if standalone {
         nix_file.write_all(b"let cratesIO = callPackage ./crates-io.nix { };
@@ -736,11 +752,16 @@ impl Crate {
                nix_name_,
                version)?;
         let mut is_first = true;
+        let mut h = BTreeSet::new();
         for deps in std::iter::once(&meta.dependencies)
             .chain(std::iter::once(&meta.build_dependencies))
             .chain(meta.target_dependencies.iter().map(|&(_, ref y)| y))
         {
             for (_, dep) in deps.iter().filter(|&(_, dep)| dep.cr.found_in_lock) {
+
+                if h.contains(&dep.cr) {
+                    continue
+                }
                 debug!("outputting dep = {:?}", dep);
                 if is_first {
                     writeln!(w, "")?;
@@ -760,6 +781,7 @@ impl Crate {
                              dep.cr.major, dep.cr.minor, dep.cr.patch,
                     )?
                 };
+                h.insert(&dep.cr);
             }
         }
         if !is_first {
@@ -850,13 +872,8 @@ impl Crate {
                     for feat in dep.conditional_features.iter() {
                         if !seen.contains(&(&dep.cr.name, &feat.feature)) {
                             let dep_name = format!(
-                                "{}.\"{}.{}.{}{}{}\".{}",
-                                nix_name(&dep.cr.name),
-                                dep.cr.major,
-                                dep.cr.minor,
-                                dep.cr.patch,
-                                if dep.cr.subpatch.is_empty() { "" } else { "-" },
-                                nix_name(&dep.cr.subpatch),
+                                "{}.\"{}\"",
+                                dep_name,
                                 FeatName(&feat.dep_feature),
                             );
                             let mut e = output_features.entry(dep_name).or_insert(Vec::new());
@@ -1065,6 +1082,10 @@ impl Crate {
                                 filter_source.push_str(" ");
                             }
                             filter_source.push_str("] ");
+                        } else if let Some(ref ws) = workspace_member {
+                            filter_source.push_str("include [ \"Cargo.toml\" \" ");
+                            filter_source.push_str(&ws.to_string_lossy());
+                            filter_source.push_str("\" ] ");
                         } else {
                             filter_source.push_str("exclude [ \".git\" \"target\" ] ");
                         }
@@ -1282,26 +1303,19 @@ fn print_deps<'a, W: Write, I: Iterator<Item = &'a Dep>>(
         write!(w, "]")?;
     }
     for i in feature_deps.iter() {
-
-        let i_version = format!(
-            "{}.{}.{}{}{}",
-            i.cr.major,
-            i.cr.minor,
-            i.cr.patch,
-            if i.cr.subpatch.is_empty() { "" } else { "-" },
-            nix_name(&i.cr.subpatch)
-        );
-
+        let i_name = nix_name(&i.cr.name);
         write!(
             w,
-            "\n{}    ++ (if features.{}.\"{}\".{} or false then [ ({}crates.{}.\"{}\" deps) ] else [])",
+            "\n{}    ++ (if features.{}.\"{}\".{} or false then [ ({}crates.{}.\"${{deps.\"{}\".\"{}\".{}}}\" deps) ] else [])",
             indent,
             nix_name_,
             version,
             FeatName(&i.cr.name),
             if i.from_crates_io { prefix } else { "" },
-            nix_name(&i.cr.name),
-            i_version
+            i_name,
+            nix_name_,
+            version,
+            i_name,
         )?;
     }
     write!(w, ")")?;

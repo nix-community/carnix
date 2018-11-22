@@ -9,7 +9,6 @@ extern crate log;
 #[macro_use]
 extern crate nom;
 extern crate regex;
-extern crate rusqlite;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
