@@ -1022,7 +1022,7 @@ impl Crate {
             format!("{}.{}.{}", self.major, self.minor, self.patch)
         };
 
-
+        writeln!(w, "# {}-{}\n", self.name, version)?;
         write!(w, "{}crates.{}.\"{}\" = deps: {{ features?(features_.{}.\"{}\" deps {{}}) }}: buildRustCrate {{\n",
 
                indent,
@@ -1262,7 +1262,8 @@ impl Crate {
         writeln!(w, "{}}};", indent)?;
 
 
-        self.output_package_features(w, n_indent, meta, prefix)?;
+        self.output_package_features(&mut w, n_indent, meta, prefix)?;
+        writeln!(w, "# end")?;
         Ok(())
     }
 }

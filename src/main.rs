@@ -46,6 +46,12 @@ fn main() {
                          .takes_value(true))
             )
             .subcommand(
+                SubCommand::with_name("merge")
+                    .arg(Arg::with_name("file")
+                         .help("Merge two crates-io.nix files")
+                         .takes_value(true))
+            )
+            .subcommand(
                 SubCommand::with_name("build")
                     .arg(Arg::with_name("include")
                          .short("-I")
@@ -172,6 +178,45 @@ fn main() {
         std::mem::drop(cache);
         let names: BTreeSet<_> = crates.iter().map(|(ref x, _)| x.name.clone()).collect();
         output::write_crates_io(&crates, &names).unwrap();
+    } else if let Some(matches) = matches.subcommand_matches("merge") {
+        let file: Box<std::io::Read> = if let Some(f) = matches.value_of("file") {
+            Box::new(std::fs::File::open(f).unwrap())
+        } else {
+            Box::new(std::io::stdin())
+        };
+        let mut file = std::io::BufReader::new(file);
+        let mut title = String::new();
+        let mut contents = String::new();
+        let mut s = String::new();
+        let mut crates = BTreeMap::new();
+        loop {
+            let n = file.read_line(&mut s).unwrap();
+            if n == 0 {
+                break
+            }
+            debug!("s {:?}", s);
+            if s == "# end\n" {
+                contents.push_str(&s);
+                crates.insert(std::mem::replace(&mut title, String::new()),
+                              std::mem::replace(&mut contents, String::new()));
+            } else if s.starts_with ("# ") {
+                title.push_str(&s);
+                contents.push_str(&s);
+            } else {
+                contents.push_str(&s);
+            }
+            s.clear();
+        }
+        println!("{{ lib, buildRustCrate, buildRustCrateHelpers }}:
+with buildRustCrateHelpers;
+let inherit (lib.lists) fold;
+    inherit (lib.attrsets) recursiveUpdate;
+in
+rec {{");
+        for (_, b) in crates.iter() {
+            print!("{}", b)
+        }
+        println!("}}");
     }
 }
 
