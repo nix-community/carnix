@@ -33,7 +33,6 @@ impl Drop for Cache {
                 if let Some((c, d)) = ex_it.peek() {
                     let (u, v, w) = self.get_index(*c, *d).unwrap();
                     if u < a {
-                        ex_it.next();
                         writeln!(f, "{} {} {}", u, v, w).unwrap();
                         false
                     } else {
