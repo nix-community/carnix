@@ -50,6 +50,7 @@ fn main() {
                 SubCommand::with_name("merge")
                     .arg(Arg::with_name("file")
                          .help("Merge two crates-io.nix files")
+                         .multiple(true)
                          .takes_value(true))
             )
             .subcommand(
@@ -180,8 +181,12 @@ fn main() {
         let names: BTreeSet<_> = crates.iter().map(|(ref x, _)| x.name.clone()).collect();
         output::write_crates_io(&crates, &names).unwrap();
     } else if let Some(matches) = matches.subcommand_matches("merge") {
-        let file: Box<std::io::Read> = if let Some(f) = matches.value_of("file") {
-            Box::new(std::fs::File::open(f).unwrap())
+        let file: Box<std::io::Read> = if let Some(v) = matches.values_of("file") {
+            let mut file: Box<std::io::Read> = Box::new(std::io::empty());
+            for f in v {
+                file = Box::new(file.chain(std::fs::File::open(f).unwrap()))
+            }
+            file
         } else {
             Box::new(std::io::stdin())
         };
