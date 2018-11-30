@@ -589,12 +589,11 @@ fn output<W: Write>(
 
         let name = nix_name(&cra.name);
         let version = format!(
-            "{}.{}.{}{}{}",
+            "{}.{}.{}{}",
             cra.major,
             cra.minor,
             cra.patch,
-            if cra.subpatch.is_empty() { "" } else { "-" },
-            nix_name(&cra.subpatch)
+            cra.subpatch
         );
         writeln!(
             nix_file,
@@ -623,7 +622,7 @@ fn output<W: Write>(
 
 /// Add the dependencies from Cargo.lock.
 fn update_deps(cra: &Crate, deps: &toml::Value, meta: &mut Meta) {
-    let dep_re = Regex::new(r"^(\S*) (\d*)\.(\d*)\.(\d*)(-(\S*))?(.*)?").unwrap();
+    let dep_re = Regex::new(r"^(\S*) (\d*)\.(\d*)\.(\d*)([\+\-]\S*)?(.*)?").unwrap();
     let mut deps_names = BTreeSet::new();
     for dep in deps.as_array().unwrap() {
         let dep = dep.as_str().unwrap();
@@ -635,12 +634,12 @@ fn update_deps(cra: &Crate, deps: &toml::Value, meta: &mut Meta) {
                 cap.get(2).unwrap().as_str().parse().unwrap(),
                 cap.get(3).unwrap().as_str().parse().unwrap(),
                 cap.get(4).unwrap().as_str().parse().unwrap(),
-                cap.get(6)
+                cap.get(5)
                     .map(|x| x.as_str().to_string())
                     .unwrap_or(String::new()),
             )
         };
-        let from_crates_io = if let Some(source) = cap.get(7) {
+        let from_crates_io = if let Some(source) = cap.get(6) {
             source.as_str() == " (registry+https://github.com/rust-lang/crates.io-index)"
         } else {
             false
@@ -713,7 +712,7 @@ impl Crate {
             self.major,
             self.minor,
             self.patch,
-            nix_name(&self.subpatch)
+            self.subpatch
         );
         // debug!("output_package_call {:?}", full_name);
         let nix_name_ = nix_name(&self.name);
