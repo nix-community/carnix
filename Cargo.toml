@@ -12,7 +12,7 @@
 
 [package]
 name = "carnix"
-version = "0.9.2"
+version = "0.9.3"
 authors = ["pe@pijul.org <pe@pijul.org>"]
 include = ["Cargo.toml", "src/main.rs", "src/cargo-generate-nixfile.rs", "src/cache.rs", "src/cfg.rs", "src/krate.rs", "src/prefetch.rs", "src/preamble.nix", "src/output.rs", "src/error.rs"]
 description = "Generate Nix expressions from Cargo.lock files (in order to use Nix as a build system for crates)."
@@ -65,3 +65,6 @@ version = "0.3"
 
 [dependencies.toml]
 version = "0.4"
+
+[dependencies.url]
+version = "1.7"

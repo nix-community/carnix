@@ -231,3 +231,20 @@ pub fn find_cargo_lock() -> Result<PathBuf, Error> {
         }
     }
 }
+
+
+pub fn parse_git(source: &str) -> SourceType {
+    if let Ok(mut url) = url::Url::parse(source.split_at(4).1) {
+        let rev = if let Some((_, rev)) = url.query_pairs().find(|(k, _)| k == "rev") {
+            rev.to_string()
+        } else {
+            return SourceType::None
+        };
+        url.set_query(None);
+        return SourceType::Git {
+            url: url.to_string(),
+            rev,
+        }
+    }
+    SourceType::None
+}

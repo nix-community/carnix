@@ -16,6 +16,7 @@ extern crate serde_json;
 extern crate tempdir;
 extern crate toml;
 extern crate dirs;
+extern crate url;
 
 use std::io::BufWriter;
 use clap::{App, Arg, SubCommand};

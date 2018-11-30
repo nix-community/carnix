@@ -7,7 +7,6 @@ use regex::Regex;
 use std::path::PathBuf;
 use itertools::Itertools;
 use dirs;
-
 use {Error, ErrorKind};
 use cfg;
 use krate::*;
@@ -305,26 +304,14 @@ fn cargo_lock_source_type(package: &toml::Value) -> SourceType {
     if let Some(source) = package.get("source") {
         let source = source.as_str().unwrap();
         if source == "registry+https://github.com/rust-lang/crates.io-index" {
-            SourceType::CratesIO
-        } else if source.starts_with("git+") {
-            let url = source.split_at(4).1;
-            debug!("url = {:?}", url);
-            let mut commit = url.split('#');
-            if let (Some(url), Some(rev)) = (commit.next(), commit.next()) {
-                SourceType::Git {
-                    url: url.to_string(),
-                    rev: rev.to_string(),
-                }
-            } else {
-                error!("could not parse Git url");
-                SourceType::None
-            }
-        } else {
-            SourceType::None
+            return SourceType::CratesIO
         }
-    } else {
-        SourceType::None
+
+        if source.starts_with("git+") {
+            return parse_git(source)
+        }
     }
+    SourceType::None
 }
 
 fn local_source_type<P:AsRef<Path>>(

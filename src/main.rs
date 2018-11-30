@@ -16,6 +16,7 @@ extern crate serde_json;
 extern crate tempdir;
 extern crate toml;
 extern crate dirs;
+extern crate url;
 
 use std::io::{BufWriter, Read, BufRead};
 use clap::{App, Arg, ArgMatches, SubCommand, AppSettings};
@@ -202,7 +203,7 @@ fn main() {
             } else if s.starts_with ("# ") {
                 title.push_str(&s);
                 contents.push_str(&s);
-            } else {
+            } else if !title.is_empty() {
                 contents.push_str(&s);
             }
             s.clear();
