@@ -81,14 +81,16 @@ use std::str::FromStr;
 impl FromStr for Crate {
     type Err = ();
     fn from_str(s: &str) -> Result<Crate, Self::Err> {
-        let re = Regex::new(r"(\S*)-(\d*)\.(\d*)\.(\d*)(-(\S*))?").unwrap();
+        debug!("parsing {:?}", s);
+        let re = Regex::new(r"(\S*)-(\d*)\.(\d*)\.(\d*)([\+\-]\S*)?").unwrap();
         let cap = re.captures(s).unwrap();
+        debug!("cap = {:?}", cap);
         Ok(Crate {
             name: cap.get(1).unwrap().as_str().to_string(),
             major: cap.get(2).unwrap().as_str().parse().unwrap(),
             minor: cap.get(3).unwrap().as_str().parse().unwrap(),
             patch: cap.get(4).unwrap().as_str().parse().unwrap(),
-            subpatch: cap.get(6).map(|x| x.as_str().to_string()).unwrap_or(String::new()),
+            subpatch: cap.get(5).map(|x| x.as_str().to_string()).unwrap_or(String::new()),
             found_in_lock: true,
         })
     }
@@ -96,10 +98,7 @@ impl FromStr for Crate {
 
 impl std::fmt::Display for Crate {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
-        write!(fmt, "{}-{}.{}.{}", self.name, self.major, self.minor, self.patch)?;
-        if !self.subpatch.is_empty() {
-            write!(fmt, "-{}", self.subpatch)?
-        }
+        write!(fmt, "{}-{}.{}.{}{}", self.name, self.major, self.minor, self.patch, self.subpatch)?;
         Ok(())
     }
 }

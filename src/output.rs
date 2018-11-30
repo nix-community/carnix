@@ -406,7 +406,7 @@ fn fixpoint<P: AsRef<Path>>(
 
             // We first try to resolve the source type using the Cargo.lock.
             let mut source_type = cargo_lock_source_type(&package);
-            debug!("name = {:?} {:?}", cra.name, source_type);
+            debug!("name = {:?} {:?}", cra, source_type);
 
             // Then try from local paths.
             if let SourceType::None = source_type {
@@ -683,18 +683,7 @@ fn update_deps(cra: &Crate, deps: &toml::Value, meta: &mut Meta) {
 }
 
 fn get_package_version(package: &toml::Value) -> Crate {
-    let ver_re = Regex::new(r"(\d*)\.(\d*)\.(\d*)(-(\S*))?").unwrap();
-    let version = package.get("version").unwrap().as_str().unwrap();
-    let cap = ver_re.captures(&version).unwrap();
-    let (a, b, c, d) = (
-        cap.get(1).unwrap().as_str().parse().unwrap(),
-        cap.get(2).unwrap().as_str().parse().unwrap(),
-        cap.get(3).unwrap().as_str().parse().unwrap(),
-        cap.get(5)
-            .map(|x| x.as_str().to_string())
-            .unwrap_or(String::new()),
-    );
-    let name = package
+    let mut name = package
         .as_table()
         .unwrap()
         .get("name")
@@ -702,14 +691,10 @@ fn get_package_version(package: &toml::Value) -> Crate {
         .as_str()
         .unwrap()
         .to_string();
-    Crate {
-        major: a,
-        minor: b,
-        patch: c,
-        subpatch: d,
-        name: name,
-        found_in_lock: true,
-    }
+    let version = package.get("version").unwrap().as_str().unwrap();
+    name.push_str("-");
+    name.push_str(version);
+    name.parse().unwrap()
 }
 
 impl Crate {
@@ -724,11 +709,10 @@ impl Crate {
             indent.push(' ');
         }
         let version = format!(
-            "{}.{}.{}{}{}",
+            "{}.{}.{}{}",
             self.major,
             self.minor,
             self.patch,
-            if self.subpatch.is_empty() { "" } else { "-" },
             nix_name(&self.subpatch)
         );
         // debug!("output_package_call {:?}", full_name);
@@ -754,20 +738,12 @@ impl Crate {
                     writeln!(w, "")?;
                 }
                 is_first = false;
-                if self.subpatch.len() > 0 {
-                    writeln!(w,"{}  {} = \"{}.{}.{}-{}\";",
-                             indent,
-                             nix_name(&dep.cr.name),
-                             dep.cr.major, dep.cr.minor, dep.cr.patch,
-                             dep.cr.subpatch
-                    )?
-                } else {
-                    writeln!(w,"{}  {} = \"{}.{}.{}\";",
-                             indent,
-                             nix_name(&dep.cr.name),
-                             dep.cr.major, dep.cr.minor, dep.cr.patch,
-                    )?
-                };
+                writeln!(w,"{}  {} = \"{}.{}.{}{}\";",
+                         indent,
+                         nix_name(&dep.cr.name),
+                         dep.cr.major, dep.cr.minor, dep.cr.patch,
+                         dep.cr.subpatch
+                )?;
                 h.insert(&dep.cr);
             }
         }
@@ -792,14 +768,11 @@ impl Crate {
             indent.push(' ');
         }
 
-        let version = if self.subpatch.len() > 0 {
+        let version =
             format!(
-                "{}.{}.{}-{}",
+                "{}.{}.{}{}",
                 self.major, self.minor, self.patch, self.subpatch
-            )
-        } else {
-            format!("{}.{}.{}", self.major, self.minor, self.patch)
-        };
+            );
 
         writeln!(
             w,
@@ -1000,14 +973,11 @@ impl Crate {
         }
 
         let nix_name_ = nix_name(&self.name);
-        let version = if self.subpatch.len() > 0 {
+        let version =
             format!(
-                "{}.{}.{}-{}",
+                "{}.{}.{}{}",
                 self.major, self.minor, self.patch, self.subpatch
-            )
-        } else {
-            format!("{}.{}.{}", self.major, self.minor, self.patch)
-        };
+            );
 
         writeln!(w, "# {}-{}\n", self.name, version)?;
         write!(w, "{}crates.{}.\"{}\" = deps: {{ features?(features_.{}.\"{}\" deps {{}}) }}: buildRustCrate {{\n",

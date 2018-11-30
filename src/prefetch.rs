@@ -136,8 +136,9 @@ impl Crate {
 
     fn prefetch_path(&self, cache: &mut Cache) -> Result<Prefetch, std::io::Error> {
 
+        debug!("prefetch {:?}", self);
         let version = if self.subpatch.len() > 0 {
-            format!("{}.{}.{}-{}", self.major, self.minor, self.patch, self.subpatch)
+            format!("{}.{}.{}{}", self.major, self.minor, self.patch, self.subpatch)
         } else {
             format!("{}.{}.{}", self.major, self.minor, self.patch)
         };
