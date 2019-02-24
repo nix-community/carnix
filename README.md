@@ -2,23 +2,15 @@ Git mirror of Carnix
 ====================
 
 This is a git mirror of the source code for `carnix`, a tool used to
-generate Nix-expressions for Rust crates.
+generate Nix-expressions for Rust crates. This is **not** currently
+the development repository for carnix.
 
-The original source repository is
-[here](https://nest.pijul.com/pmeunier/carnix), but does not contain
-versions older than `0.7.2`.
+The upstream source repository is [on the Pijul
+Nest](https://nest.pijul.com/pmeunier/carnix).
 
-Various fixes for smaller issues in Carnix are being added on the
-`devel`-branch of this repository. They will be submitted to the
-upstream repository once it is back online.
-
-~~Carnix was originally released by [Pijul][], however the [old source
-repository][] was never updated after version `0.5` and is now offline
-entirely.~~
-
-There are still releases happening on [crates.io][] and I am simply
-mirroring these into this git repository to make the source code
-easily accessible.
+Releases of `carnix` are happening on [crates.io][] and this
+repository is simply mirroring them into `git` to make the source code
+as well as an overview over versions easily accessible.
 
 ## Reporting issues
 
@@ -27,12 +19,43 @@ repository.
 
 ## "Changelog"
 
-Based on the `git diff` output between the versions I've attempted to
-recreate a changelog of what has changed in between these versions of
-Carnix.
+Based on the [patch
+list](https://nest.pijul.com/pmeunier/carnix:master/patches) on Pijul
+which contains most of the changes to Carnix, as well as the `git
+diff` output between the imported versions, this section attempts to
+provide a changelog of what has changed in between the different
+released versions of Carnix.
 
-This overview is probably missing some things as I only took a very
-cursory look for now.
+Specific changes may be missing from this list if they weren't
+included in the patch list or aren't easily discernible from the code
+changes.
+
+### v0.9.0 - v0.9.6
+
+These versions were released in November 2018. They are grouped
+together here as the chronological release history doesn't seem to
+line up with the patch history in Pijul.
+
+Included changes:
+
+* Carnix no longer depends on SQLite for its crate cache
+* A new subcommand for merging `crates-io.nix`-files was added
+* URL and crate version parsing has improved
+
+Other changes may also be included.
+
+### v0.8.7 - v0.8.12
+
+These versions contain minor internal changes, some of them were
+released on the same day as 0.8.6, others came in a bit later.
+
+Most notably it seems that the `target_arch` target configuration from
+Cargo is now supported.
+
+### v0.8.6
+
+This version was released on October 21st and includes fixes for local
+sources, feature-gated binary builds and internal refactorings.
 
 ### v0.8.0 - v0.8.5
 
@@ -103,7 +126,6 @@ All credit for `buildRustCrate` and `carnix` itself goes to the people
 behind Pijul!
 
 [Pijul]: https://pijul.org/2017/12/12/buildrustcrate/
-[old source repository]: https://nest.pijul.com/pmeunier/nix-rust
 [crates.io]: https://crates.io/crates/carnix
 [pull request]: https://github.com/NixOS/nixpkgs/pull/39003
 [discussions]: https://nest.pijul.com/pmeunier/carnix:master/discussions
