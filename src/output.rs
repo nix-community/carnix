@@ -550,7 +550,11 @@ fn output<W: Write>(
     } else {
         nix_file.write_all(b"{ lib, buildPlatform, buildRustCrate, buildRustCrateHelpers, cratesIO, fetchgit }:\n")?;
     }
-    nix_file.write_all(b"with buildRustCrateHelpers;\nlet inherit (lib.lists) fold;\n    inherit (lib.attrsets) recursiveUpdate;\nin\n")?;
+    nix_file.write_all(b"with buildRustCrateHelpers;\nlet inherit (lib.lists) fold;\n    inherit (lib.attrsets) recursiveUpdate;\n")?;
+    if standalone {
+        nix_file.write_all(b"  cratesIO = (callPackage ./crates-io.nix { });\n")?;
+    }
+    nix_file.write_all(b"in\n")?;
     let mut names = BTreeSet::new();
     for (cra, _) in all_packages.iter() {
         names.insert(cra.name.clone());
@@ -567,33 +571,25 @@ fn output<W: Write>(
             }
         }
     }
-    if standalone {
-        nix_file.write_all(b"let cratesIO = callPackage ./crates-io.nix { };
-    crates = cratesIO")?;
-    } else {
-        nix_file.write_all(b"let crates = cratesIO")?;
-    }
+    nix_file.write_all(b"rec {\n")?;
+    nix_file.write_all(b"  crates = cratesIO")?;
     let mut is_first = true;
     for (cra, meta) in all_packages.iter() {
         if let Src::Crate { .. } = meta.src {
         } else {
             if is_first {
-                writeln!(nix_file, " // rec {{")?;
+                nix_file.write_all(b" // rec {\n")?;
                 is_first = false;
             }
-            cra.output_package(root_prefix, &mut nix_file, 2, &meta, &names, "cratesIO.")?;
+            cra.output_package(root_prefix, &mut nix_file, 4, &meta, &names, "cratesIO.")?;
         }
     }
     if is_first {
-        nix_file.write_all(b"; in\n")?;
+        nix_file.write_all(b";\n")?;
     } else {
-        nix_file.write_all(b"\n}; in\n\n")?;
+        // If we wrote at least one line, close the opened attribute set.
+        nix_file.write_all(b"\n  };\n\n")?;
     }
-
-    nix_file.write_all(b"rec {\n")?;
-
-
-
 
 
     let mut all = b"[ ".to_vec();
@@ -623,7 +619,6 @@ fn output<W: Write>(
     nix_file.write_all(b"  __all = ")?;
     nix_file.write_all(&all)?;
     nix_file.write_all(b";\n")?;
-
 
     for (cra, meta) in all_packages.iter() {
         cra.output_package_call(&mut nix_file, 2, &meta)?;
@@ -1129,7 +1124,7 @@ impl Crate {
                         }
                         write!(w, "features.\"{}\".\"{}\".\"{}\" ", nix_name_, version, r)?;
                     }
-                    write!(w, "then [{{ ");
+                    write!(w, "then [{{ ")?;
                 }
                 if let Some(ref name) = bin.name {
                     write!(w, " name = \"{}\"; ", name)?;
