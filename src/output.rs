@@ -1011,6 +1011,10 @@ impl Crate {
             meta.authors.iter().map(|s| format!("\"{}\"", s)).join(" ")
         )?;
 
+        if let Some(ref edition) = meta.edition {
+            writeln!(w, "{}  edition = {};", indent, edition)?;
+        }
+
         match meta.src {
             Src::Crate { ref sha256 } => {
                 writeln!(w, "{}  sha256 = \"{}\";", indent, sha256)?;

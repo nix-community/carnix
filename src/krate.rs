@@ -36,6 +36,7 @@ pub struct Meta {
     pub implied_features: Vec<ConditionalFeature>,
     pub bins: Vec<Bin>,
     pub authors: Vec<String>,
+    pub edition: Option<String>,
 }
 
 #[derive(Debug, PartialEq, Eq, Default, Clone)]
