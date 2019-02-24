@@ -34,21 +34,26 @@ Carnix.
 This overview is probably missing some things as I only took a very
 cursory look for now.
 
-### v0.6.7
+### v0.8.0 - v0.8.5
 
-Repository was bootstrapped from `crates.io` sources at this version,
-not sure what the difference to the previous versions is.
+I'm not sure what changed in these versions yet. There may be some
+info in the `nixpkgs` repository, but I haven't gone hunting for it
+yet.
 
-### v0.6.8
+Will update this once I've had time to figure it out.
 
-This version seems to contain minor changes to how `nix-prefetch-git`
-errors are handled.
+On a sidenote there really is no `0.8.2`, it goes straight from
+`0.8.1` to `0.8.3`.
 
-### v0.6.9
+### v0.7.2
 
-This version seems to contain changes to how Carnix handles the local
-"workspace" of a crate and which files are included into the Nix
-sources when building a derivation.
+This version seems to contain minor changes to workspace handling
+again.
+
+### v0.7.1
+
+This version seems to contain refactorings related to error handling
+and something about handling replaced packages in Cargo correctly.
 
 ### v0.7.0
 
@@ -72,26 +77,21 @@ of Carnix, @P-E-Meunier, says the following about v0.7.0:
 This PR bumps the version straight to `0.7.2` though, so the summary
 probably includes "all of the above".
 
-### v0.7.1
+### v0.6.9
 
-This version seems to contain refactorings related to error handling
-and something about handling replaced packages in Cargo correctly.
+This version seems to contain changes to how Carnix handles the local
+"workspace" of a crate and which files are included into the Nix
+sources when building a derivation.
 
-### v0.7.2
+### v0.6.8
 
-This version seems to contain minor changes to workspace handling
-again.
+This version seems to contain minor changes to how `nix-prefetch-git`
+errors are handled.
 
-### v0.8.0 - v0.8.5
+### v0.6.7
 
-I'm not sure what changed in these versions yet. There may be some
-info in the `nixpkgs` repository, but I haven't gone hunting for it
-yet.
-
-Will update this once I've had time to figure it out.
-
-On a sidenote there really is no `0.8.2`, it goes straight from
-`0.8.1` to `0.8.3`.
+Repository was bootstrapped from `crates.io` sources at this version,
+not sure what the difference to the previous versions is.
 
 --------------
 
