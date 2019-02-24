@@ -237,9 +237,14 @@ pub fn parse_git(source: &str) -> SourceType {
         let rev = if let Some((_, rev)) = url.query_pairs().find(|(k, _)| k == "rev") {
             rev.to_string()
         } else {
-            return SourceType::None
+            if let Some(rev) = url.fragment() {
+                rev.to_string()
+            } else {
+                return SourceType::None
+            }
         };
         url.set_query(None);
+        url.set_fragment(None);
         return SourceType::Git {
             url: url.to_string(),
             rev,

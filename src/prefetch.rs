@@ -134,7 +134,7 @@ impl Crate {
     }
 
 
-    fn prefetch_path(&self, cache: &mut Cache) -> Result<Prefetch, std::io::Error> {
+    fn prefetch_path(&self, cache: &mut Cache) -> Result<Prefetch, Error> {
 
         debug!("prefetch {:?}", self);
         let version = if self.subpatch.len() > 0 {
@@ -158,15 +158,22 @@ impl Crate {
             .output()?;
 
         let sha256:String = from_utf8(&prefetch.stdout).unwrap().trim().to_string();
-        let path = get_path(&prefetch.stderr);
-        let pre = Prefetch {
-            prefetch: Src::Crate { sha256 },
-            path: Path::new(path).to_path_buf(),
-        };
-        if from_cache.is_none() {
-            cache.insert(&url, pre.clone());
+        if let Ok(path) = get_path(&prefetch.stderr) {
+            let pre = Prefetch {
+                prefetch: Src::Crate { sha256 },
+                path: Path::new(path).to_path_buf(),
+            };
+            if from_cache.is_none() {
+                cache.insert(&url, pre.clone());
+            }
+            Ok(pre)
+        } else {
+            if prefetch.stderr.ends_with(b"HTTP error 404\n") {
+                Err(ErrorKind::Prefetch404(self.clone()).into())
+            } else {
+                Err(ErrorKind::PrefetchFailed(self.clone()).into())
+            }
         }
-        Ok(pre)
     }
 
 
@@ -197,7 +204,7 @@ impl Crate {
                 if prefetch.status.success() {
 
                     let prefetch_json: GitFetch = serde_json::from_str(from_utf8(&prefetch.stdout).unwrap()).unwrap();
-                    let path = get_path(&prefetch.stderr);
+                    let path = get_path(&prefetch.stderr)?;
 
                     let pre = Prefetch {
                         prefetch: Src::Git(prefetch_json),
@@ -208,7 +215,7 @@ impl Crate {
                     }
                     Ok(pre)
                 } else {
-                    error!("nix-prefetch-git exited with error code {:?}: {:?}", prefetch.status, prefetch.stderr);
+                    error!("nix-prefetch-git exited with error code {:?}: {:?}", prefetch.status, std::str::from_utf8(&prefetch.stderr));
                     Err(ErrorKind::NixPrefetchGitFailed.into())
                 }
             }
@@ -369,7 +376,7 @@ fn declared_dependencies(v: &BTreeMap<String, toml::Value>) -> BTreeSet<String> 
     declared_dependencies
 }
 
-fn get_path(stderr: &[u8]) -> &str {
+fn get_path(stderr: &[u8]) -> Result<&str, Error> {
     debug!("{:?}", from_utf8(&stderr));
     let path_re = Regex::new("path is (‘|')?([^’'\n]*)(’|')?").unwrap();
     let prefetch_stderr = from_utf8(&stderr).expect("stderr of nix-prefetch-url not utf8");
@@ -377,7 +384,7 @@ fn get_path(stderr: &[u8]) -> &str {
         cap
     } else {
         eprintln!("nix-prefetch-url returned:\n{}", prefetch_stderr);
-        std::process::exit(1)
+        return Err(ErrorKind::PrefetchReturnedNothing.into())
     };
-    cap.get(2).unwrap().as_str()
+    Ok(cap.get(2).unwrap().as_str())
 }

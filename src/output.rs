@@ -7,7 +7,7 @@ use regex::Regex;
 use std::path::PathBuf;
 use itertools::Itertools;
 use dirs;
-use {Error, ErrorKind};
+use Error;
 use cfg;
 use krate::*;
 use cache::*;
@@ -240,7 +240,13 @@ pub fn generate_nix<W: Write, P: AsRef<Path>, Q: AsRef<Path>>(
             }
 
             let path = workspace_members.source_type(src.as_ref(), &main_cra.name);
-            let mut meta = main_cra.prefetch(&mut cache, &path).unwrap();
+            let mut meta = match main_cra.prefetch(&mut cache, &path) {
+                Ok(meta) => meta,
+                Err(e) => {
+                    std::mem::drop(cache);
+                    return Err(e)
+                }
+            };
             if let Some(inc) = cargo_toml
                 .get("package")
                 .unwrap()
@@ -268,14 +274,20 @@ pub fn generate_nix<W: Write, P: AsRef<Path>, Q: AsRef<Path>>(
         }
     };
 
-    let mut all_packages = fixpoint(
+    let mut all_packages = match fixpoint(
         &mut cache,
         src,
         &mut packages,
         &mut deps,
         &workspace_members,
         main_meta.as_ref(),
-    )?;
+    ) {
+        Ok(pack) => pack,
+        Err(e) => {
+            std::mem::drop(cache);
+            return Err(e)
+        }
+    };
 
     // Make sure we save the cache.
     std::mem::drop(cache);
@@ -321,6 +333,7 @@ fn local_source_type<P:AsRef<Path>>(
     deps: &BTreeMap<String, Dep>,
     name: &str,
 ) -> SourceType {
+    debug!("src = {:?}", src.as_ref().map(|x| x.as_ref()));
     debug!("crate_type: {:?}", crate_type);
     let loc = crate_type.source_type(src.as_ref(), name);
     debug!("loc: {:?}", loc);
@@ -418,10 +431,9 @@ fn fixpoint<P: AsRef<Path>>(
             let meta = {
                 debug!("path = {:?}", source_type);
                 if source_type != SourceType::None {
-                    if let Ok(mut prefetch) = cra.prefetch(cache, &source_type) {
-                        Some(prefetch)
-                    } else {
-                        return Err(ErrorKind::PrefetchFailed(cra).into());
+                    match cra.prefetch(cache, &source_type) {
+                        Ok(mut prefetch) => Some(prefetch),
+                        Err(e) => return Err(e)
                     }
                 } else {
                     None

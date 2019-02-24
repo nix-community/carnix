@@ -7,6 +7,11 @@ error_chain!{
     }
     errors {
         CouldNotTranslateTarget{}
+        PrefetchReturnedNothing{}
+        Prefetch404(cr: krate::Crate) {
+            description("Prefetching a crate returned HTTP error 404. Did you forget to specify `--src`?"),
+            display("Prefetching {} returned HTTP error 404. Did you forget to specify `--src`?", cr)
+        }
         PrefetchFailed(cr: krate::Crate){
             description("Prefetching a crate failed"),
             display("Prefetching {} failed", cr)
