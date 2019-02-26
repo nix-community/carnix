@@ -998,7 +998,9 @@ impl Crate {
         writeln!(w, "{}  crateName = \"{}\";", indent, self.name)?;
 
         writeln!(w, "{}  version = \"{}\";", indent, version)?;
-
+        if let Some(ref descr) = meta.description {
+            writeln!(w, "{}  description = \"{}\";", indent, descr)?;
+        }
         writeln!(
             w,
             "{}  authors = [ {} ];",

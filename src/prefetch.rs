@@ -99,6 +99,7 @@ impl Crate {
         // Grab the authors from Cargo.toml, so we can create the
         // CARGO_PKG_AUTHORS environment variable at build time.
         let edition = v.get("package").and_then(|p| p.get("edition").map(|s| s.to_string()));
+        let description = v.get("package").and_then(|p| p.get("description").map(|s| s.to_string()));
         let authors = v.get("package")
             .and_then(|x| x.get("authors"))
             .and_then(|x| x.as_array())
@@ -131,6 +132,7 @@ impl Crate {
             implied_features: implied,
             bins: bins(v),
             authors,
+            description,
             edition
         })
     }
