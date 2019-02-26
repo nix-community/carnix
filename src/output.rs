@@ -797,7 +797,7 @@ impl Crate {
         }
         if !meta.implied_features.is_empty() {
             for feat in meta.implied_features.iter() {
-                let dep = format!("{}.\"{}\".{}", nix_name_, version, FeatName(&feat.dep_feature));
+                let dep = format!("{}.\"{}\".\"{}\"", nix_name_, version, FeatName(&feat.dep_feature));
                 let mut e = output_features.entry(dep).or_insert(Vec::new());
                 e.push(format!(
                     "(f.{}.\"{}\".{} or false)",
